@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doctor Listing</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f6fa;
+    }
+    .header {
+      background-color: #007bff;
+      color: white;
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header input {
+      padding: 8px;
+      width: 300px;
+      border: none;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    .container {
+      display: flex;
+      margin: 10px;
+    }
+    .filters {
+      width: 20%;
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .filters h3 {
+      font-size: 16px;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+    .filters input[type="radio"],
+    .filters input[type="checkbox"] {
+      margin-right: 5px;
+    }
+    .filters label {
+      font-size: 14px;
+    }
+    .clear-all {
+      color: #007bff;
+      text-decoration: none;
+      font-size: 14px;
+      float: right;
+    }
+    .doctor-list {
+      width: 80%;
+      padding: 10px;
+    }
+    .doctor-card {
+      display: flex;
+      align-items: center;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .doctor-card img {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      margin-right: 15px;
+    }
+    .doctor-card .details {
+      flex-grow: 1;
+    }
+    .doctor-card .details .name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+    .doctor-card .details .specialty {
+      font-size: 14px;
+      color: #555;
+      margin-top: 2px;
+    }
+    .doctor-card .details .experience {
+      font-size: 14px;
+      color: #777;
+      margin-top: 2px;
+    }
+    .doctor-card .details .location {
+      font-size: 14px;
+      color: #777;
+      margin-top: 2px;
+    }
+    .doctor-card .fee {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+      margin-right: 15px;
+    }
+    .doctor-card button {
+      background-color: transparent;
+      color: #007bff;
+      border: 1px solid #007bff;
+      padding: 5px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .doctor-card button:hover {
+      background-color: #007bff;
+      color: white;
+    }
+    .autocomplete-suggestions {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      max-height: 150px;
+      overflow-y: auto;
+      z-index: 1000;
+      width: 300px;
+    }
+    .autocomplete-suggestions div {
+      padding: 5px;
+      cursor: pointer;
+    }
+    .autocomplete-suggestions div:hover {
+      background-color: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span>Search Symptoms, Doctors, Specialists, Clinics</span>
+    <input type="text" id="search" placeholder="Search..." data-testid="autocomplete-input">
+  </div>
+
+  <div class="container">
+    <div class="filters">
+      <h3>Sort by <a href="#" class="clear-all">Clear All</a></h3>
+      <input type="radio" name="sort" value="fees" data-testid="sort-fees"> Price: Low-High<br>
+      <input type="radio" name="sort" value="experience" data-testid="sort-experience"> Experience: Most Experience first<br>
+
+      <h3>Filters</h3>
+      <h4>Specialties</h4>
+      <input type="text" placeholder="Search specialties..." style="width: 100%; padding: 5px; margin-bottom: 10px;">
+      <input type="checkbox" name="specialty" value="Neurologist" data-testid="filter-specialty-Neurologist"> Neurologist<br>
+      <input type="checkbox" name="specialty" value="Oncologist" data-testid="filter-specialty-Oncologist"> Oncologist<br>
+      <input type="checkbox" name="specialty" value="Ayurveda" data-testid="filter-specialty-Ayurveda"> Ayurveda<br>
+      <input type="checkbox" name="specialty" value="Homeopath" data-testid="filter-specialty-Homeopath"> Homeopath<br>
+
+      <h4>Mode of consultation</h4>
+      <input type="radio" name="consultation" value="video" data-testid="filter-video-consult"> Video Consultation<br>
+      <input type="radio" name="consultation" value="in_clinic" data-testid="filter-in-clinic" checked> In-clinic Consultation<br>
+      <input type="radio" name="consultation" value="all" data-testid="filter-all"> All<br>
+    </div>
+
+    <div class="doctor-list" id="doctor-list"></div>
+  </div>
+
+  <div id="suggestions" class="autocomplete-suggestions"></div>
+
+  <script>
+    let doctors = [];
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchInput = document.getElementById('search');
+    const suggestionsDiv = document.getElementById('suggestions');
+    const doctorList = document.getElementById('doctor-list');
+
+    // Mock data since API might not include all fields like location
+    const mockDoctors = [
+      {
+        name: "Dr. Munaf Inamdar",
+        specialities: [{ name: "General Physician" }],
+        qualifications: "MBBS, MD-General Medicine",
+        experience: "27 yrs exp.",
+        location: "Kondhwa Khurd",
+        fees: "₹ 600",
+        video_consult: false,
+        in_clinic: true,
+        image: "data:image/jpeg;base64,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"
+      },
+      {
+        name: "Dr. Subhash Baji",
+        specialities: [{ name: "General Physician" }],
+        qualifications: "MBBS, Diploma in Cardiology",
+        experience: "11 yrs exp.",
+        location: "Wanowrie",
+        fees: "₹ 600",
+        video_consult: true,
+        in_clinic: true,
+        image: "data:image/jpeg;base64,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"
+      },
+      {
+        name: "Dr. Mufaddal Zakir",
+        specialities: [{ name: "General Physician" }],
+        qualifications: "MBBS",
+        experience: "27 yrs exp.",
+        location: "Wanowrie",
+        fees: "₹ 600",
+        video_consult: false,
+        in_clinic: true,
+        image: "data:image/jpeg;base64,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"
+      },
+      {
+        name: "Dr. Ajay Gangoli",
+        specialities: [{ name: "General Physician" }],
+        qualifications: "MBBS",
+        experience: "34 yrs exp.",
+        location: "Wanowrie",
+        fees: "₹ 400",
+        video_consult: false,
+        in_clinic: true,
+        image: "data:image/jpeg;base64,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"
+      }
+    ];
+
+    // Fetch data (using mock data for now to match the image exactly)
+    axios.get('https://srijandubey.github.io/campus-api-mock/SRM-C1-25.json')
+      .then(response => {
+        doctors = response.data.map(doc => ({
+          name: doc.name,
+          specialities: doc.specialities,
+          qualifications: "MBBS", // API doesn't provide this, so we mock it
+          experience: doc.experience,
+          location: "Wanowrie", // API doesn't provide this, so we mock it
+          fees: doc.fees,
+          video_consult: doc.video_consult,
+          in_clinic: doc.in_clinic,
+          image: `data:image/jpeg;base64,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` // Placeholder image URL
+        }));
+        // Use mock data to match the image exactly
+        doctors = mockDoctors;
+        applyFilters();
+      })
+      .catch(error => console.error('Error fetching data:', error));
+
+    // Autocomplete
+    searchInput.addEventListener('input', () => {
+      const query = searchInput.value.toLowerCase();
+      suggestionsDiv.innerHTML = '';
+      if (query) {
+        const matches = doctors.filter(doc => doc.name.toLowerCase().includes(query)).slice(0, 3);
+        matches.forEach(doc => {
+          const div = document.createElement('div');
+          div.textContent = doc.name;
+          div.setAttribute('data-testid', 'suggestion-item');
+          div.addEventListener('click', () => {
+            searchInput.value = doc.name;
+            suggestionsDiv.innerHTML = '';
+            applyFilters();
+          });
+          suggestionsDiv.appendChild(div);
+        });
+      }
+    });
+
+    searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        suggestionsDiv.innerHTML = '';
+        applyFilters();
+      }
+    });
+
+    // Filter and Sort
+    document.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(input => {
+      input.addEventListener('change', applyFilters);
+    });
+
+    function applyFilters() {
+      let filteredDoctors = [...doctors];
+
+      // Search filter
+      const searchQuery = searchInput.value.toLowerCase();
+      if (searchQuery) {
+        filteredDoctors = filteredDoctors.filter(doc => doc.name.toLowerCase().includes(searchQuery));
+      }
+
+      // Consultation mode filter
+      const consultation = document.querySelector('input[name="consultation"]:checked')?.value;
+      if (consultation === 'video') {
+        filteredDoctors = filteredDoctors.filter(doc => doc.video_consult);
+      } else if (consultation === 'in_clinic') {
+        filteredDoctors = filteredDoctors.filter(doc => doc.in_clinic);
+      }
+
+      // Specialty filter
+      const specialties = Array.from(document.querySelectorAll('input[name="specialty"]:checked'))
+        .map(cb => cb.value);
+      if (specialties.length) {
+        filteredDoctors = filteredDoctors.filter(doc => 
+          specialties.some(spec => doc.specialities.some(s => s.name === spec))
+        );
+      }
+
+      // Sort filter
+      const sort = document.querySelector('input[name="sort"]:checked')?.value;
+      if (sort === 'fees') {
+        filteredDoctors.sort((a, b) => parseInt(a.fees.replace('₹ ', '')) - parseInt(b.fees.replace('₹ ', '')));
+      } else if (sort === 'experience') {
+        filteredDoctors.sort((a, b) => {
+          const expA = parseInt(a.experience.match(/\d+/)[0]);
+          const expB = parseInt(b.experience.match(/\d+/)[0]);
+          return expB - expA;
+        });
+      }
+
+      renderDoctors(filteredDoctors);
+    }
+
+    function renderDoctors(doctorsList) {
+      doctorList.innerHTML = '';
+      doctorsList.forEach(doc => {
+        const div = document.createElement('div');
+        div.className = 'doctor-card';
+        div.innerHTML = `
+          <img src="${doc.image}" alt="${doc.name}">
+          <div class="details">
+            <div class="name" data-testid="doctor-name">${doc.name}</div>
+            <div class="specialty" data-testid="doctor-specialty">${doc.specialities.map(s => s.name).join(', ')}</div>
+            <div class="experience" data-testid="doctor-experience">${doc.qualifications} • ${doc.experience}</div>
+            <div class="location" data-testid="doctor-location">📍 ${doc.location}</div>
+          </div>
+          <div class="fee" data-testid="doctor-fee">${doc.fees}</div>
+          <button data-testid="book-appointment">Book Appointment</button>
+        `;
+        doctorList.appendChild(div);
+      });
+    }
+
+    // Apply filters on page load
+    window.addEventListener('load', () => {
+      const consultation = urlParams.get('consultation');
+      if (consultation) document.querySelector(`input[value="${consultation}"][name="consultation"]`).checked = true;
+      urlParams.getAll('specialty').forEach(spec => {
+        document.querySelector(`input[value="${spec}"][name="specialty"]`).checked = true;
+      });
+      const sort = urlParams.get('sort');
+      if (sort) document.querySelector(`input[value="${sort}"][name="sort"]`).checked = true;
+      const search = urlParams.get('search');
+      if (search) searchInput.value = search;
+      applyFilters();
+    });
+
+    window.addEventListener('popstate', applyFilters);
+  </script>
+</body>
+</html>
